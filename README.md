@@ -7,7 +7,7 @@ Implements basic semaphore and time limited semaphore on go language.
 ## Basic Semaphore
 
 ```go
-func main() {
+func TestSemaphore(t *testing.T) {
   permit := 3
   sem := semaphore.NewSemaphore(permit)
   sem.Aquire(1)
@@ -24,7 +24,7 @@ func main() {
 ## Time limieted semaphore
 
 ```go
-func main() {
+func TestTimeLimitedSemaphore(t *testing.T) {
   permit := 3
   sem := semaphore.NewTimeLimitedSemaphore(permit, time.Second)
   sem.Aquire(1)
