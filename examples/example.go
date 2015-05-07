@@ -25,7 +25,7 @@ func getMainCh() chan byte {
 				sem.Release()
 			}(i)
 		}
-		sem.Aquire(permit)
+		sem.Wait()
 		ch <- 0
 	}()
 	return ch

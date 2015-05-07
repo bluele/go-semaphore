@@ -63,6 +63,10 @@ func (sm *Semaphore) Available() int {
 	return len(sm.channel)
 }
 
+func (sm *Semaphore) Wait() {
+	sm.Aquire(sm.permit)
+}
+
 func (sm *TimeLimitedSemaphore) Aquire(n int) {
 	for i := 0; i < n; i++ {
 		<-sm.channel
@@ -79,6 +83,10 @@ func (sm *TimeLimitedSemaphore) Release() {
 
 func (sm *TimeLimitedSemaphore) Available() int {
 	return len(sm.channel)
+}
+
+func (sm *TimeLimitedSemaphore) Wait() {
+	sm.Aquire(sm.permit)
 }
 
 func (sm *TimeLimitedSemaphore) gc() {
