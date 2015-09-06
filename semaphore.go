@@ -1,6 +1,7 @@
 package semaphore
 
 import (
+	"sync"
 	"time"
 )
 
@@ -8,7 +9,15 @@ const (
 	resource byte = 0
 )
 
-type Semaphore struct {
+type Semaphore interface {
+	Aquire(int)
+	Release()
+	Available() int
+	Wait()
+	deepCopy() Semaphore
+}
+
+type BasicSemaphore struct {
 	channel chan byte
 	permit  int
 }
@@ -20,8 +29,8 @@ type TimeLimitedSemaphore struct {
 	permit  int
 }
 
-func NewSemaphore(permit int) *Semaphore {
-	sm := &Semaphore{
+func NewSemaphore(permit int) *BasicSemaphore {
+	sm := &BasicSemaphore{
 		permit:  permit,
 		channel: make(chan byte, permit),
 	}
@@ -45,13 +54,13 @@ func NewTimeLimitedSemaphore(permit int, per time.Duration) *TimeLimitedSemaphor
 	return sm
 }
 
-func (sm *Semaphore) Aquire(n int) {
+func (sm *BasicSemaphore) Aquire(n int) {
 	for i := 0; i < n; i++ {
 		<-sm.channel
 	}
 }
 
-func (sm *Semaphore) Release() {
+func (sm *BasicSemaphore) Release() {
 	select {
 	case sm.channel <- resource:
 	default:
@@ -59,12 +68,16 @@ func (sm *Semaphore) Release() {
 	}
 }
 
-func (sm *Semaphore) Available() int {
+func (sm *BasicSemaphore) Available() int {
 	return len(sm.channel)
 }
 
-func (sm *Semaphore) Wait() {
+func (sm *BasicSemaphore) Wait() {
 	sm.Aquire(sm.permit)
+}
+
+func (sm *BasicSemaphore) deepCopy() Semaphore {
+	return NewSemaphore(sm.permit)
 }
 
 func (sm *TimeLimitedSemaphore) Aquire(n int) {
@@ -106,4 +119,80 @@ func (sm *TimeLimitedSemaphore) gc() {
 
 		}
 	}
+}
+
+func (sm *TimeLimitedSemaphore) deepCopy() Semaphore {
+	return NewTimeLimitedSemaphore(sm.permit, sm.per)
+}
+
+type NamedSemaphores struct {
+	model Semaphore
+	sems  map[string]Semaphore
+	mu    sync.RWMutex
+}
+
+func NewNamedSemaphores(model Semaphore) *NamedSemaphores {
+	nss := &NamedSemaphores{}
+	nss.model = model
+	nss.sems = make(map[string]Semaphore)
+	return nss
+}
+
+func (ns *NamedSemaphores) Aquire(name string, n int) {
+	ns.mu.RLock()
+	sm, ok := ns.sems[name]
+	if ok {
+		defer ns.mu.RUnlock()
+		sm.Aquire(n)
+		return
+	}
+	ns.mu.RUnlock()
+	ns.createNamedSemaphore(name, func(sm Semaphore) interface{} {
+		sm.Aquire(n)
+		return nil
+	})
+}
+
+func (ns *NamedSemaphores) Release(name string) {
+	ns.mu.RLock()
+	defer ns.mu.RUnlock()
+	sm, ok := ns.sems[name]
+	if !ok {
+		panic("no such name :'" + name + "'")
+	}
+	sm.Release()
+}
+
+func (ns *NamedSemaphores) Available(name string) int {
+	ns.mu.RLock()
+	sm, ok := ns.sems[name]
+	if ok {
+		defer ns.mu.RUnlock()
+		return sm.Available()
+	}
+	ns.mu.RUnlock()
+	return ns.createNamedSemaphore(name, func(sm Semaphore) interface{} {
+		return sm.Available()
+	}).(int)
+}
+
+func (ns *NamedSemaphores) Wait(name string) {
+	ns.mu.RLock()
+	defer ns.mu.RUnlock()
+	sm, ok := ns.sems[name]
+	if !ok {
+		panic("no such name :'" + name + "'")
+	}
+	sm.Wait()
+}
+
+func (ns *NamedSemaphores) createNamedSemaphore(name string, cb func(Semaphore) interface{}) interface{} {
+	ns.mu.Lock()
+	defer ns.mu.Unlock()
+	sm, ok := ns.sems[name]
+	if !ok {
+		sm = ns.model.deepCopy()
+		ns.sems[name] = sm
+	}
+	return cb(sm)
 }
