@@ -17,6 +17,17 @@ func TestSemaphore(t *testing.T) {
 	if sem.Available() != permit {
 		t.Errorf("sem.Available() should be %v", permit)
 	}
+
+	if !sem.AquireWithTimeout(time.Millisecond) {
+		t.Errorf("sem.AquireWithTimeout(time.Millisecond) should be %v", true)
+	}
+	sem.Release()
+	for i := 0; i < permit; i++ {
+		sem.Aquire(1)
+	}
+	if sem.AquireWithTimeout(time.Millisecond) {
+		t.Errorf("sem.AquireWithTimeout(time.Millisecond) should be %v", false)
+	}
 }
 
 func TestTimeLimitedSemaphore(t *testing.T) {
@@ -33,6 +44,17 @@ func TestTimeLimitedSemaphore(t *testing.T) {
 	time.Sleep(2 * time.Second)
 	if sem.Available() != permit {
 		t.Errorf("sem.Available() should be %v", permit)
+	}
+
+	if !sem.AquireWithTimeout(time.Millisecond) {
+		t.Errorf("sem.AquireWithTimeout(time.Millisecond) should be %v", true)
+	}
+	sem.Release()
+	for i := 0; i < permit; i++ {
+		sem.Aquire(1)
+	}
+	if sem.AquireWithTimeout(time.Millisecond) {
+		t.Errorf("sem.AquireWithTimeout(time.Millisecond) should be %v", false)
 	}
 }
 
@@ -68,5 +90,16 @@ func TestNamedSemaphores(t *testing.T) {
 	time.Sleep(2 * time.Second)
 	if sem.Available(name) != permit {
 		t.Errorf(`sem.Available(%#v) should be %v`, name, permit)
+	}
+
+	if !sem.AquireWithTimeout(name, time.Millisecond) {
+		t.Errorf("sem.AquireWithTimeout(name, time.Millisecond) should be %v", true)
+	}
+	sem.Release(name)
+	for i := 0; i < permit; i++ {
+		sem.Aquire(name, 1)
+	}
+	if sem.AquireWithTimeout(name, time.Millisecond) {
+		t.Errorf("sem.AquireWithTimeout(name, time.Millisecond) should be %v", false)
 	}
 }

@@ -11,6 +11,7 @@ const (
 
 type Semaphore interface {
 	Aquire(int)
+	AquireWithTimeout(time.Duration) bool
 	Release()
 	Available() int
 	Wait()
@@ -60,6 +61,16 @@ func (sm *BasicSemaphore) Aquire(n int) {
 	}
 }
 
+func (sm *BasicSemaphore) AquireWithTimeout(timeout time.Duration) bool {
+	ch := time.After(timeout)
+	select {
+	case <-sm.channel:
+		return true
+	case <-ch:
+		return false
+	}
+}
+
 func (sm *BasicSemaphore) Release() {
 	select {
 	case sm.channel <- resource:
@@ -83,6 +94,16 @@ func (sm *BasicSemaphore) deepCopy() Semaphore {
 func (sm *TimeLimitedSemaphore) Aquire(n int) {
 	for i := 0; i < n; i++ {
 		<-sm.channel
+	}
+}
+
+func (sm *TimeLimitedSemaphore) AquireWithTimeout(timeout time.Duration) bool {
+	ch := time.After(timeout)
+	select {
+	case <-sm.channel:
+		return true
+	case <-ch:
+		return false
 	}
 }
 
@@ -151,6 +172,19 @@ func (ns *NamedSemaphores) Aquire(name string, n int) {
 		sm.Aquire(n)
 		return nil
 	})
+}
+
+func (ns *NamedSemaphores) AquireWithTimeout(name string, timeout time.Duration) bool {
+	ns.mu.RLock()
+	sm, ok := ns.sems[name]
+	if ok {
+		defer ns.mu.RUnlock()
+		return sm.AquireWithTimeout(timeout)
+	}
+	ns.mu.RUnlock()
+	return ns.createNamedSemaphore(name, func(sm Semaphore) interface{} {
+		return sm.AquireWithTimeout(timeout)
+	}).(bool)
 }
 
 func (ns *NamedSemaphores) Release(name string) {
